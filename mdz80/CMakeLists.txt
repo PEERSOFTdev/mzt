@@ -14,6 +14,7 @@ add_executable(mdz80
 	mio.c
 	opcodes_8080.c
 	opcodes_z80.c
+	opcodes_z180.c
 	pass1.c
 	pass2.c
 	${BISON_zmac_OUTPUTS}
