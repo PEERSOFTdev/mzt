@@ -109,7 +109,9 @@ struct entry {
 //
 
 extern char	licenseText[];
-extern int	d8080;				// 8080 mnemonic flag
+/* mnemonics flags based on CPUs */
+enum	CPU_TYPE {c_Z80, c_64180, c_8080};
+extern enum CPU_TYPE cputype;
 
 extern char	src[FN_LEN], dst[FN_LEN];	// file name buffers
 extern char	baseFileName[FN_LEN];		// source file name without extension

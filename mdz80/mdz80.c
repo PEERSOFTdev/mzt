@@ -58,13 +58,14 @@
 #include "pass1.h"
 #include "pass2.h"
 #include "opcodes_z80.h"
+#include "opcodes_z180.h"
 #include "opcodes_8080.h"
 #include "zmac.h"
 
 //
 // Global variables
 //
-int	d8080;				// 0 for z80, 1 for 8080
+enum	CPU_TYPE cputype = c_Z80;
 int	dotpseudo = 0;
 char	src[FN_LEN], dst[FN_LEN];	// file name buffers
 char	app[FN_LEN];
@@ -161,6 +162,7 @@ void usage( void )
 	        "\t-s change 'defb' and 'defw' to 'db' and 'dw'.\n"
 	        "\t-l output labels, symbols, and mnemonics in lower case.\n"
 	        "\t-x [nnnn] add hexadecimal offset to program addresses.\n"
+	        "\t-1 assume Hitachi 64180 CPU.\n"
 	        "\t-8 generate 8080 mnemonics.\n"
 	        "\t-T during trace (-t) presume unidentified binary is code\n"
 	        "\nGeneral options:\n"
@@ -176,7 +178,7 @@ void usage( void )
 
 void version()
 {
-	printf( "\nMDZ80 Z80/8080 Disassembler v %d.%d.%d"
+	printf( "\nMDZ80 Z80/64180/8080 Disassembler v %d.%d.%d"
 #ifdef ALPHA
 	        "-alpha %d"
 #else
@@ -185,6 +187,7 @@ void version()
 #endif
 #endif
 	        "\nCopyright (C) %d by P. Betti <pbetti@lpconsul.net>\n"
+	        "Enhanced by PEERSOFT to add support for 64180\n"
 	        "Original copyrights: (C) 1990-2007 by J. L. Post for D52 code\n"
 	        "Bruce Norskog, Tim Mann, Mark Rison, Thierry Jouin and others for ZMAC code%s\n",
 	        DVERSION, MAJORREV, MINORREV,
@@ -231,7 +234,6 @@ int main( int argc, char *argv[] )
 	offset = 0;				// default start at address 0
 	ascii_flag = FALSE;
 	equflag = FALSE;
-	d8080 = 0;
 	line = 0;
 	baseFileName[0] = '\0';
 
@@ -266,8 +268,14 @@ int main( int argc, char *argv[] )
 			if ( count == line )			// skip if already identified
 				break;				// as the file name
 
-			if ( c == '8' ) {
-				d8080 = 1;
+			// 64180 mnemonics
+			if ( c == '1' ) {
+				cputype = c_64180;
+				strcpy( dst, baseFileName );
+				strcat( dst, ".180" );
+				// 8080 mnemonics
+			} else if ( c == '8' ) {
+				cputype = c_8080;
 				strcpy( dst, baseFileName );
 				strcat( dst, ".d80" );
 				// use ascii macro
@@ -408,7 +416,8 @@ int main( int argc, char *argv[] )
 		if (dotpseudo == TRUE) printf("Prefixing defs with a dot.\n");
 		if (traceflag == TRUE) printf("Tracing and analyze mode is ON.\n");
 		if (prsmcode == TRUE) printf("... and presume code for unidentified data.\n");
-		if (d8080 == TRUE) printf("Using 8080 mnemonics for output.\n");
+		if (cputype == c_64180) printf("Assuming 64180 CPU.\n");
+		if (cputype == c_8080) printf("Using 8080 mnemonics for output.\n");
 		if (hexflag == TRUE) printf("Including address and data in comments.\n");
 		if (ascii_flag == TRUE) printf("Using ASCII macros.\n");
 		if (fileflag == CPMFILE) printf("CP/M mode is ON.\n");

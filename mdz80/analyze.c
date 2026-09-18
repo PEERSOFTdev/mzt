@@ -54,6 +54,7 @@
 #include "defs.h"
 #include "analyze.h"
 #include "opcodes_z80.h"
+#include "opcodes_z180.h"
 
 #define	DEBUG
 

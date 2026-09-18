@@ -54,6 +54,7 @@
 #include "pass1.h"
 #include "pass2.h"
 #include "opcodes_z80.h"
+#include "opcodes_z180.h"
 #include "opcodes_8080.h"
 
 int opcount;				// bytes/opcode count
