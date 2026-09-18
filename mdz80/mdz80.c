@@ -212,6 +212,7 @@ int main( int argc, char *argv[] )
 	char	*inp;
 	int	line;
 	char	tempstr[16];
+	int	dstflag = FALSE;			// TRUE once -o sets an explicit output name
 
 	if ( argc < 2 )
 		usage();
@@ -268,16 +269,14 @@ int main( int argc, char *argv[] )
 			if ( count == line )			// skip if already identified
 				break;				// as the file name
 
-			// 64180 mnemonics
+			// 64180 mnemonics (output extension is set once option
+			// parsing is done, below - -1/-8 may appear before or
+			// after the filename on the command line)
 			if ( c == '1' ) {
 				cputype = c_64180;
-				strcpy( dst, baseFileName );
-				strcat( dst, ".180" );
 				// 8080 mnemonics
 			} else if ( c == '8' ) {
 				cputype = c_8080;
-				strcpy( dst, baseFileName );
-				strcat( dst, ".d80" );
 				// use ascii macro
 			} else if ( c == 'a' ) {
 				strcpy( ascistr, "ascii" );
@@ -333,6 +332,7 @@ int main( int argc, char *argv[] )
 			else if ( c == 'o' ) {
 				if ( ++count < argc ) {
 					strcpy( dst, argv[count] );
+					dstflag = TRUE;
 				} else
 					usage();
 			}
@@ -379,6 +379,18 @@ int main( int argc, char *argv[] )
 	if (strlen(baseFileName) == 0) {
 		printf("No input filename specified.\n");
 		exit(FILE_ERROR);
+	}
+
+	if ( !dstflag ) {				// no explicit -o output name given
+		strcpy( dst, baseFileName );		// so pick the extension for the
+							// selected CPU now that both the
+							// base name and -1/-8 are known
+		if ( cputype == c_64180 )
+			strcat( dst, ".180" );
+		else if ( cputype == c_8080 )
+			strcat( dst, ".d80" );
+		else
+			strcat( dst, ".z80" );
 	}
 
 	if ( dotpseudo ) {
