@@ -45,16 +45,15 @@
 #ifndef	_OPCODES_Z180_H
 #define	_OPCODES_Z180_H
 
-extern struct mnementry mnem1tbl[];
-extern struct mnementry cb1tbl[];
-extern struct mnementry reg1tbl[];
-extern struct mnementry ddcb1tbl[];
-extern struct mnementry dd11tbl[];
-extern struct mnementry dd21tbl[];
-extern struct mnementry ed1tbl[];
-extern unsigned char opt1tbl[];
+// The register table, CB table, indexed (DD/FD) opcodes and plain-opcode
+// instruction sizes are identical between Z80 and the HD64180, so only the
+// ED-prefix decode flags and the T-state tables need HD64180-specific
+// versions here. The ED-prefix mnemonics themselves live in the shared,
+// mode-independent edtbl in opcodes_z80.c (see ed1code's comment).
+
 extern unsigned char ed1code[];
-extern unsigned char dd1code[];
+extern unsigned char cycles1[256];
+extern unsigned char cycles21[256];
 extern unsigned char cb1cycles[256];
 extern unsigned char dd1cycles[256];
 extern unsigned char ed1cycles[256];
