@@ -53,6 +53,7 @@
 #include "pass1.h"
 #include "pass2.h"
 #include "opcodes_z80.h"
+#include "opcodes_z180.h"
 #include "opcodes_8080.h"
 
 //
@@ -67,6 +68,7 @@ void pass1( void )
 {
 	int i, l, pc, rel;
 	byte j, k, mask;
+	unsigned char *edc = ( cputype == c_64180 ) ? ed1code : edcode;
 
 	printf( "Pass 1 0000" );
 
@@ -79,7 +81,7 @@ void pass1( void )
 		else if ( !( pgmflags[i] & ( PF_ADRS | PF_WORD | PF_BYTE | PF_ASCII ) ) ) {										// if code...
 			mask = ( byte ) PF_SPLIT;
 
-			if ( d8080 )
+			if ( cputype == c_8080 )
 				j = opttbl80[k];	// get option byte
 			else
 				j = opttbl[k];		// get option byte
@@ -113,7 +115,7 @@ void pass1( void )
 
 				switch ( k ) {
 				case 0xed:
-					if ( edcode[j] & 2 ) {
+					if ( ( edc[j] & 3 ) == 3 ) {
 						pc = ( pgmmem[i + 2] & 0xff ) |
 						     ( ( pgmmem[i + 3] << 8 ) & 0xff00 );
 
@@ -124,7 +126,7 @@ void pass1( void )
 							pgmflags[pc] = ( pgmflags[pc] & ~mask ) | PF_REF;
 					}
 
-					i += ( edcode[j] & 3 );
+					i += ( edc[j] & 3 );
 					break;
 
 				case 0xdd:
@@ -145,7 +147,7 @@ void pass1( void )
 				}
 			}
 
-			if ( d8080 )
+			if ( cputype == c_8080 )
 				i = i + ( opttbl80[k] & OPT_SIZE ) + 1;		// update location pointer
 			else
 				i = i + ( opttbl[k] & OPT_SIZE ) + 1;		// update location pointer

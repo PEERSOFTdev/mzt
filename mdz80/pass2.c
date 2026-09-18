@@ -73,10 +73,24 @@ void pass2( void )
 	char c, * cptr;
 	int skip, year;
 	int i, l, q, temp;
-	byte j, k;
+	byte j, k, k2;
 	int pflag;
 	time_t tp;
 	int cyc, cyc2;		// for cycle counting
+	unsigned char *edc = ( cputype == c_64180 ) ? ed1code : edcode;
+
+	// T-state tables: pick the HD64180 set when disassembling for that CPU,
+	// otherwise the standard Z80 set (8080 timing is not yet implemented,
+	// same as before this table was split out - see cycleflag block below)
+	unsigned char *cyctbl    = ( cputype == c_64180 ) ? cycles1     : cycles;
+	unsigned char *cyc2tbl   = ( cputype == c_64180 ) ? cycles21    : cycles2;
+	unsigned char *edcyctbl  = ( cputype == c_64180 ) ? ed1cycles   : edcycles;
+	unsigned char *edcyc2tbl = ( cputype == c_64180 ) ? ed1cycles2  : edcycles2;
+	unsigned char *cbcyctbl  = ( cputype == c_64180 ) ? cb1cycles   : cbcycles;
+	unsigned char *ddcyctbl  = ( cputype == c_64180 ) ? dd1cycles   : ddcycles;
+	unsigned char *fdcyctbl  = ( cputype == c_64180 ) ? fd1cycles   : fdcycles;
+	unsigned char *ddcbcyctbl = ( cputype == c_64180 ) ? ddcb1cycles : ddcbcycles;
+	unsigned char *fdcbcyctbl = ( cputype == c_64180 ) ? fdcb1cycles : fdcbcycles;
 
 	k = 0;
 	j = 0xff;
@@ -95,9 +109,13 @@ void pass2( void )
 
 	fprintf( fp, ";\n;  MDZ80 V%d.%d.%d ", DVERSION, MAJORREV, MINORREV );	// output header
 
-	switch ( d8080 ) {
-		case 1:
+	switch ( cputype ) {
+		case c_8080:
 			fprintf( fp, "8080" );
+			break;
+
+		case c_64180:
+			fprintf( fp, "64180" );
 			break;
 
 		default:
@@ -418,10 +436,10 @@ void pass2( void )
 			opcount = 1;
 			k = pgmmem[i];						// get opcode
 
-			if ( d8080 ) {
+			if ( cputype == c_8080 ) {
 				j = opttbl80[k];				// get options
 				// sim/rim not in 8080
-				if ( ( k == 0x20 || k == 0x30 ) && ( d8080 != 2 ) ) {
+				if ( k == 0x20 || k == 0x30 ) {
 					doopcode( defbstr );
 					fprintf( fp, "\t" );
 					kcnt = ( kcnt + 8 ) & 0x78;
@@ -452,7 +470,7 @@ void pass2( void )
 				break;
 
 			case OPT_PAR:						// should only occur if 8080/8085 mnemonics
-				if ( !d8080 ) {
+				if ( cputype != c_8080 ) {
 					fprintf( stderr, "\nZ80 PROCESSING ERROR!\n" );
 					fflush( stderr );
 				}
@@ -612,14 +630,80 @@ void pass2( void )
 
 				switch ( k ) {
 				case 0xed:
-					k = pgmmem[i + 1];			// get 2nd byte
+					k2 = pgmmem[i + 1];			// get 2nd byte (kept separate from
+										// k, which opttbl[k] below still needs
+										// to refer to the 0xed prefix itself)
 
-					if ( edcode[k] ) {
-						c = ( k < 0xa0 ) ? k - 0x40 : k - 0x64;
+					if ( edc[k2] ) {
+						c = k2;
 						doopcode( edtbl[( byte ) c].mnem );
 
-						switch ( edcode[k] ) {
+						switch ( edc[k2] ) {
 						case OPT_ED_2:
+							break;
+
+						case OPT_ED_IN0:	// IN0 r,(nn) - register already in mnemonic
+							q = ( int ) pgmmem[i + 2] & 0xff;
+
+							fprintf( fp, "(" );
+							kcnt++;
+
+							if ( pgmflags[i + 2] & PF_NAME )
+								cptr = find_entry( i + 2, name_count, name_val_index );
+							else
+								cptr = find_entry( q, symbol_count, sym_val_index );
+
+							if ( cptr == NULL )
+								puthex( pgmmem[i + 2] );
+							else
+								kcnt += fprintf( fp, "%s", cptr );
+
+							fprintf( fp, ")" );
+							kcnt++;
+
+							splitcheck( i + 2 );
+							opcount = 3;
+							break;
+
+						case OPT_ED_OUT0:	// OUT0 (nn),r
+							q = ( int ) pgmmem[i + 2] & 0xff;
+
+							fprintf( fp, "(" );
+							kcnt++;
+
+							if ( pgmflags[i + 2] & PF_NAME )
+								cptr = find_entry( i + 2, name_count, name_val_index );
+							else
+								cptr = find_entry( q, symbol_count, sym_val_index );
+
+							if ( cptr == NULL )
+								puthex( pgmmem[i + 2] );
+							else
+								kcnt += fprintf( fp, "%s", cptr );
+
+							fprintf( fp, ")," );
+							kcnt += 2;
+							doopcode( regtbl[( k2 >> 3 ) & 7].mnem );
+
+							splitcheck( i + 2 );
+							opcount = 3;
+							break;
+
+						case OPT_ED_IMM:	// TST nn / TSTIO nn - plain immediate
+							q = ( int ) pgmmem[i + 2] & 0xff;
+
+							if ( pgmflags[i + 2] & PF_NAME )
+								cptr = find_entry( i + 2, name_count, name_val_index );
+							else
+								cptr = find_entry( q, symbol_count, sym_val_index );
+
+							if ( cptr == NULL )
+								puthex( pgmmem[i + 2] );
+							else
+								kcnt += fprintf( fp, "%s", cptr );
+
+							splitcheck( i + 2 );
+							opcount = 3;
 							break;
 
 						case OPT_ED_STORE:
@@ -734,7 +818,7 @@ void pass2( void )
 							break;
 						}
 					} else {
-						invalided( k );
+						invalided( k2 );
 						j |= 0x80;
 					}
 					break;
@@ -776,40 +860,40 @@ void pass2( void )
 				}
 
 				// get cycles - here would come 8080 support, would we have the appropriate tables ready
-				cyc = cycles[pgmmem[i] & 0xff];
-				cyc2 = cycles2[pgmmem[i] & 0xff];
+				cyc = cyctbl[pgmmem[i] & 0xff];
+				cyc2 = cyc2tbl[pgmmem[i] & 0xff];
 
 				switch ( pgmmem[i] & 0xff ) {
 				case 0xed:
-					cyc = edcycles[pgmmem[i+1] & 0xff];
-					cyc2 = edcycles2[pgmmem[i+1] & 0xff];
+					cyc = edcyctbl[pgmmem[i+1] & 0xff];
+					cyc2 = edcyc2tbl[pgmmem[i+1] & 0xff];
 					break;
 
 				case 0xcb:
-					cyc = cbcycles[pgmmem[i+1] & 0xff];
+					cyc = cbcyctbl[pgmmem[i+1] & 0xff];
 					cyc2 = cyc;
 					break;
 
 				case 0xdd:
 					if ( ( pgmmem[i+1] & 0xff ) == 0xcb )
-						cyc = ddcbcycles[pgmmem[i+3] & 0xff];
+						cyc = ddcbcyctbl[pgmmem[i+3] & 0xff];
 					else
-						cyc = ddcycles[pgmmem[i+1] & 0xff];
+						cyc = ddcyctbl[pgmmem[i+1] & 0xff];
 
 					cyc2 = cyc;
 					break;
 
 				case 0xfd:
 					if ( ( pgmmem[i+1] & 0xff ) == 0xcb )
-						cyc = fdcbcycles[pgmmem[i+3] & 0xff];
+						cyc = fdcbcyctbl[pgmmem[i+3] & 0xff];
 					else
-						cyc = fdcycles[pgmmem[i+1] & 0xff];
+						cyc = fdcyctbl[pgmmem[i+1] & 0xff];
 
 					cyc2 = cyc;
 					break;
 				}
 
-// would be for 8080 support d8080 ? i = i + (opttbl80[k] & OPT_SIZE) + opcount : i + (opttbl[k] & OPT_SIZE) + opcount,
+// cputype == c_8080 ? i + (opttbl80[k] & OPT_SIZE) + opcount : i + (opttbl[k] & OPT_SIZE) + opcount,
 
 				cycle_in( i, i + ( opttbl[k] & OPT_SIZE ) + opcount, cyc, cyc2 );
 			}
@@ -822,7 +906,7 @@ void pass2( void )
 
 				kcnt += fprintf( fp, "; %04X ", i );
 
-				if ( d8080 )
+				if ( cputype == c_8080 )
 					q = ( opttbl80[k] & OPT_SIZE ) + opcount;
 				else
 					q = ( opttbl[k] & OPT_SIZE ) + opcount;
@@ -849,7 +933,7 @@ void pass2( void )
 				newline = TRUE;
 			}
 
-			if ( d8080 )
+			if ( cputype == c_8080 )
 				i = i + ( opttbl80[k] & OPT_SIZE ) + opcount;	// update location counter
 			else
 				i = i + ( opttbl[k] & OPT_SIZE ) + opcount;	// update location counter
