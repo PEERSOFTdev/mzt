@@ -88,6 +88,12 @@
 #define	OPT_ED_LD_SP	0x33	// load sp from memory
 #define	OPT_ED_RET	0x81	// retn or reti
 
+// HD64180-only ED option bits (3 byte instructions: op + 1 immediate byte)
+
+#define	OPT_ED_IN0	0x42	// IN0 r,(nn) - register is in the mnemonic text
+#define	OPT_ED_OUT0	0x52	// OUT0 (nn),r - register printed via regtbl
+#define	OPT_ED_IMM	0x62	// TST nn / TSTIO nn - plain immediate operand
+
 // DD and FD option bits:
 
 #define	OPT_DD_2	0x01	// 2 byte, entry in dd1tbl

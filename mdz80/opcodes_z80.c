@@ -150,23 +150,52 @@ struct mnementry dd2tbl[] = {
 
 //  Miscellaneous codes (ed ..)
 
+// Note: edtbl is dense across the whole 0x00-0xBB range, including the
+// HD64180-only opcodes (0x00-0x3F and 0x7C-0x9F). This is safe in plain
+// Z80/8080 mode because every lookup is gated by edcode[] first, and
+// edcode[] stays zero at every HD64180-only slot for those CPU types.
+
 struct mnementry edtbl[] = {
+    {"IN0 B,"},     {"OUT0 "},      {"DEFB "},      {"DEFB "},      // 00-03
+    {"TST B"},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 04-07
+    {"IN0 C,"},     {"OUT0 "},      {"DEFB "},      {"DEFB "},      // 08-0B
+    {"TST C"},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 0C-0F
+    {"IN0 D,"},     {"OUT0 "},      {"DEFB "},      {"DEFB "},      // 10-13
+    {"TST D"},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 14-17
+    {"IN0 E,"},     {"OUT0 "},      {"DEFB "},      {"DEFB "},      // 18-1B
+    {"TST E"},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 1C-1F
+    {"IN0 H,"},     {"OUT0 "},      {"DEFB "},      {"DEFB "},      // 20-23
+    {"TST H"},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 24-27
+    {"IN0 L,"},     {"OUT0 "},      {"DEFB "},      {"DEFB "},      // 28-2B
+    {"TST L"},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 2C-2F
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 30-33
+    {"TST (HL)"},   {"DEFB "},      {"DEFB "},      {"DEFB "},      // 34-37
+    {"IN0 A,"},     {"OUT0 "},      {"DEFB "},      {"DEFB "},      // 38-3B
+    {"TST A"},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 3C-3F
     {"IN B,(C)"},   {"OUT (C),B"},  {"SBC HL,BC"},  {"LD "},        // 40-43
     {"NEG"},        {"RETN"},       {"IM 0"},       {"LD I,A"},     // 44-47
     {"IN C,(C)"},   {"OUT (C),C"},  {"ADC HL,BC"},  {"LD BC,"},     // 48-4B
-    {"DEFB "},      {"RETI"},       {"DEFB "},      {"LD R,A"},     // 4C-4F
+    {"MLT BC"},     {"RETI"},       {"DEFB "},      {"LD R,A"},     // 4C-4F
     {"IN D,(C)"},   {"OUT (C),D"},  {"SBC HL,DE"},  {"LD "},        // 50-53
     {"DEFB "},      {"DEFB "},      {"IM 1"},       {"LD A,I"},     // 54-57
     {"IN E,(C)"},   {"OUT (C),E"},  {"ADC HL,DE"},  {"LD DE,"},     // 58-5B
-    {"DEFB "},      {"DEFB "},      {"IM 2"},       {"LD A,R"},     // 5C-5F
+    {"MLT DE"},     {"DEFB "},      {"IM 2"},       {"LD A,R"},     // 5C-5F
     {"IN H,(C)"},   {"OUT (C),H"},  {"SBC HL,HL"},  {"DEFB "},      // 60-63
-    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"RRD"},        // 64-67
+    {"TST "},       {"DEFB "},      {"DEFB "},      {"RRD"},        // 64-67
     {"IN L,(C)"},   {"OUT (C),L"},  {"ADC HL,HL"},  {"DEFB "},      // 68-6B
-    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"RLD"},        // 6C-6F
+    {"MLT HL"},     {"DEFB "},      {"DEFB "},      {"RLD"},        // 6C-6F
     {"DEFB "},      {"DEFB "},      {"SBC HL,SP"},  {"LD "},        // 70-73
-    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 74-77
+    {"TSTIO "},     {"DEFB "},      {"SLP"},        {"DEFB "},      // 74-77
     {"IN A,(C)"},   {"OUT (C),A"},  {"ADC HL,SP"},  {"LD SP,"},     // 78-7B
-
+    {"MLT SP"},     {"DEFB "},      {"DEFB "},      {"DEFB "},      // 7C-7F
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"OTIM"},       // 80-83
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 84-87
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"OTDM"},       // 88-8B
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 8C-8F
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"OTIMR"},      // 90-93
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 94-97
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"OTDMR"},      // 98-9B
+    {"DEFB "},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // 9C-9F
     {"LDI"},        {"CPI"},        {"INI"},        {"OUTI"},       // A0-A3
     {"DEFB "},      {"DEFB "},      {"DEFB "},      {"DEFB "},      // A4-A7
     {"LDD"},        {"CPD"},        {"IND"},        {"OUTD"},       // A8-AB
