@@ -816,20 +816,22 @@ bool trace( int pc )
 				} else
 					tpc++;
 			} else {	// code >= 0x100
+							// tpc still points at the prefix byte, so the
+							// operands of these start at tpc + 2
 				if ( code == OPCODE_LDIX ) {	// ld ix,nn
-					ixreg = pgmmem[tpc + 1] & 0xff;
-					ixreg |= ( ( pgmmem[tpc + 2] & 0xff ) << 8 );
+					ixreg = pgmmem[tpc + 2] & 0xff;
+					ixreg |= ( ( pgmmem[tpc + 3] & 0xff ) << 8 );
 				} else if ( code == OPCODE_LDIXI ) {	// ld ix,(nn)
-					dptr = pgmmem[tpc + 1] & 0xff;
-					dptr |= ( ( pgmmem[tpc + 2] & 0xff ) << 8 );
+					dptr = pgmmem[tpc + 2] & 0xff;
+					dptr |= ( ( pgmmem[tpc + 3] & 0xff ) << 8 );
 					ixreg = pgmmem[dptr] & 0xff;
 					ixreg |= ( ( pgmmem[dptr + 1] & 0xff ) << 8 );
 				} else if ( code == OPCODE_LDIY ) {	// ld iy,nn
-					iyreg = pgmmem[tpc + 1] & 0xff;
-					iyreg |= ( ( pgmmem[tpc + 2] & 0xff ) << 8 );
+					iyreg = pgmmem[tpc + 2] & 0xff;
+					iyreg |= ( ( pgmmem[tpc + 3] & 0xff ) << 8 );
 				} else if ( code == OPCODE_LDIYI ) {	// ld iy,(nn)
-					dptr = pgmmem[tpc + 1] & 0xff;
-					dptr |= ( ( pgmmem[tpc + 2] & 0xff ) << 8 );
+					dptr = pgmmem[tpc + 2] & 0xff;
+					dptr |= ( ( pgmmem[tpc + 3] & 0xff ) << 8 );
 					iyreg = pgmmem[dptr] & 0xff;
 					iyreg |= ( ( pgmmem[dptr + 1] & 0xff ) << 8 );
 				}
