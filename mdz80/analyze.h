@@ -172,6 +172,7 @@ extern bool	analyze(void);
 extern bool	aPass1(void);
 extern bool	aPass2(void);
 extern bool	trace(int pc);
+extern int	prefixedLength(int adrs);
 extern bool	isString(int pc, int stop);
 extern bool	isprint7b(byte c, int * is8b);
 extern int	getEndOfString(int pc, int stop);

@@ -451,6 +451,41 @@ int check_jump( int pc, int upto )
 // 	return 0;
 }
 
+// Length in bytes (prefix included) of the cb/dd/ed/fd prefixed instruction
+// at 'adrs', derived from the same tables pass1/pass2 decode with, so the
+// tracer stays in step with the disassembler. Invalid prefixed codes report
+// two bytes, which is what the trace assumed for everything before.
+
+int prefixedLength( int adrs )
+{
+	byte code = pgmmem[adrs + 1];
+	unsigned char *edc = ( cputype == c_64180 ) ? ed1code : edcode;
+
+	switch ( pgmmem[adrs] & 0xff ) {
+	case 0xed:
+		return edc[code] ? 1 + ( edc[code] & 3 ) : 2;
+
+	case 0xdd:
+	case 0xfd:
+		switch ( ddcode[code] & 0xf ) {
+		case OPT_DD_2:
+			return 2;
+
+		case OPT_DD_LOAD:
+		case OPT_DD_ARTH:
+			return 3;
+
+		case OPT_DD_DIR:
+		case OPT_DD_CB:
+			return 4;
+		}
+
+		return 2;
+	}
+
+	return 2;				// cb xx is always two bytes
+}
+
 // Trace a single thread of code starting at address 'pc'.
 // Return TRUE if error, else return FALSE.
 
@@ -459,7 +494,7 @@ bool trace( int pc )
 	bool done;
 	byte flag;
 	int code, adrs, dest, dptr;
-	int i, pushLevelSave = 0;
+	int i, plen, pushLevelSave = 0;
 
 	if ( !isTraceableCode( pc ) )			// does not appear to be executable code,
 		return FALSE;				// but this is not an error
@@ -799,9 +834,12 @@ bool trace( int pc )
 					iyreg |= ( ( pgmmem[dptr + 1] & 0xff ) << 8 );
 				}
 
-				tpc++;
-				analysisFlags[tpc] = ANALYZE_TAGGED;
-				tpc++;
+				plen = prefixedLength( tpc );
+
+				for ( i = 1; i < plen; i++ )
+					analysisFlags[tpc + i] = ANALYZE_TAGGED;
+
+				tpc += plen;
 			}
 
 			break;
