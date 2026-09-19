@@ -87,6 +87,8 @@ int	kcnt;				// output char counter
 int	pc;				// current program counter
 int	himark;				// highest data adrs
 int	offset;				// program counter offset
+int	skipbytes;			// bytes to skip at start of binary input file
+int	maxbytes;			// max bytes to read from binary input file (0 = no limit)
 byte	* pgmmem;			// program data pointer
 int	* pgmflags;			// pointer to program flags
 
@@ -162,6 +164,11 @@ void usage( void )
 	        "\t-s change 'defb' and 'defw' to 'db' and 'dw'.\n"
 	        "\t-l output labels, symbols, and mnemonics in lower case.\n"
 	        "\t-x [nnnn] add hexadecimal offset to program addresses.\n"
+	        "\t-k [nnnn] skip nnnn bytes at the start of a binary input file\n"
+	        "\t   before reading (use with -x to disassemble a window mapped\n"
+	        "\t   to a different base address, e.g. an EPROM page).\n"
+	        "\t-z [nnnn] read at most nnnn bytes from a binary input file\n"
+	        "\t   (use with -k to bound a window; binary input only).\n"
 	        "\t-1 assume Hitachi 64180 CPU.\n"
 	        "\t-8 generate 8080 mnemonics.\n"
 	        "\t-T during trace (-t) presume unidentified binary is code\n"
@@ -233,6 +240,8 @@ int main( int argc, char *argv[] )
 	traceflag = FALSE;
 	prsmcode = FALSE;
 	offset = 0;				// default start at address 0
+	skipbytes = 0;
+	maxbytes = 0;
 	ascii_flag = FALSE;
 	equflag = FALSE;
 	line = 0;
@@ -326,6 +335,16 @@ int main( int argc, char *argv[] )
 			// add hex offset to program
 			else if ( c == 'x' ) {
 				offset = atox( inp );
+				break;
+			}
+			// skip bytes at start of binary input file (window into a larger image)
+			else if ( c == 'k' ) {
+				skipbytes = atox( inp );
+				break;
+			}
+			// limit how many bytes of binary input file are read
+			else if ( c == 'z' ) {
+				maxbytes = atox( inp );
 				break;
 			}
 			// output file
@@ -435,6 +454,8 @@ int main( int argc, char *argv[] )
 		if (fileflag == CPMFILE) printf("CP/M mode is ON.\n");
 		if (strcmp(defbstr, "db") == 0) printf("Using short form for defs.\n");
 		if (offset > 0) printf("Adding offset %04X to source.\n", offset);
+		if (skipbytes > 0) printf("Skipping %04X bytes at start of input file.\n", skipbytes);
+		if (maxbytes > 0) printf("Reading at most %04X bytes from input file.\n", maxbytes);
 		if (equflag == TRUE) printf("Processing symbols from asm source [%s]\n", esrc);
 		printf("\n");
 	}
@@ -625,7 +646,7 @@ char * makeupper( char *str )
 
 int readfile( char *filename )
 {
-	int	i, j, rectype, page, line, readsize;
+	int	i, j, rectype, page, line, readsize, bytesread;
 
 // open source file
 
@@ -662,6 +683,11 @@ int readfile( char *filename )
 	readsize = MAX_LINE;
 
 	if ( fileflag == BINFILE || fileflag == CPMFILE ) {		// if binary file...
+		if ( skipbytes )
+			fseek( fp, skipbytes, SEEK_SET );		// start of the requested window
+
+		bytesread = 0;
+
 		while ( !feof( fp ) ) {					// until end of file...
 			i = fread( linebuffer, 1, readsize, fp );	// read a block of data
 
@@ -677,15 +703,22 @@ int readfile( char *filename )
 				pgmmem[pc] = linebuffer[j];		// copy to program space
 				pgmflags[pc] = PF_DATA;
 				pc++;
+				bytesread++;
 
 				if ( ( pc & 0xff ) == 0 )
 					printf( "\r%04X", pc );		// show progress
+
+				if ( maxbytes && bytesread >= maxbytes )	// window filled
+					break;
 			}
 
 			if ( pc & WORD_MASK )
 				himark = pc;
 			else
 				himark = WORD_MASK;			// flag highest location
+
+			if ( maxbytes && bytesread >= maxbytes )
+				break;
 		}
 	}
 
