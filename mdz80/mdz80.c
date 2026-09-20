@@ -169,7 +169,7 @@ void usage( void )
 	        "\t   to a different base address, e.g. an EPROM page).\n"
 	        "\t-z [nnnn] read at most nnnn bytes from a binary input file\n"
 	        "\t   (use with -k to bound a window; binary input only).\n"
-	        "\t-1 assume Hitachi 64180 CPU.\n"
+	        "\t-1 assume Hitachi HD64180/Z180 CPU.\n"
 	        "\t-8 generate 8080 mnemonics.\n"
 	        "\t-T during trace (-t) presume unidentified binary is code\n"
 	        "\nGeneral options:\n"

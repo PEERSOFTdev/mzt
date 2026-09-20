@@ -238,6 +238,8 @@
     satisfied with the readability of the output file, you may want to run the
     disassembler once more without the -a option to produce a file compatible
     with your cross assembler. <br>
+    <h4><em>-1 (disassemble HD64180/Z180 code)</em></h4>
+    Disassembles code, assuming Hitachi HD64180/Z180 CPU.<br>
     <h4><em>-8 (disassemble 8080 code)</em></h4>
     Disassembles code using 8080 opcodes instead of Z80 opcodes (that is the
     default).<br>
@@ -321,6 +323,56 @@
     option nor the -h option are specified, the disassembler will first search
     for a file with an extention of '.hex', and if not found, will then search
     for a binary file with an extention of '.bin'.&nbsp;
+    <h4><em>-k (skip bytes at start of binary input file)</em></h4>
+    This option causes the disassembler to skip a number of bytes at the start
+    of a binary input file before reading begins. The count is hexadecimal and
+    must be attached to the option letter, in the same style as -x, ie: -k1000
+    skips 1000 hex bytes. This is useful for disassembling one window out of a
+    larger image, for example a single page of an eprom that holds several.<br>
+    <br>
+    Note that -k seeks within the <em>file</em>, while -x sets the
+    <em>address</em> that the code is disassembled at. The two are independent,
+    and are normally given together. For example, to disassemble the 4K byte
+    page that begins at offset 1000 hex of a larger segment file, and map it to
+    address C000 hex:
+    <table summary="" cellspacing="5">
+      <tbody>
+        <tr>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td>mdz80 -xC000 -k1000 -z1000 -b segment.rom</td>
+        </tr>
+      </tbody>
+    </table>
+    and the next 4K byte page of the same file:
+    <table summary="" cellspacing="5">
+      <tbody>
+        <tr>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td>mdz80 -xC000 -k2000 -z1000 -b segment.rom</td>
+        </tr>
+      </tbody>
+    </table>
+    The -k option applies only to binary input (the -b option) and to CP/M .com
+    input (the -C option). It is ignored when reading an Intel hex file. If the
+    option is given with no value, no bytes are skipped. <br>
     <h4><em>-l (lowercase case output)</em></h4>
     Causes labels, symbols, mnemonics, etc to be output in lower case, for cross
     assemblers that may require lower case code. Comments, literal data values,
@@ -415,6 +467,17 @@
     <br>
     If given on the command line, the -x option overrides any -o directive in
     the control file. <br>
+    <h4><em>-z (limit bytes read from binary input file)</em></h4>
+    This option limits the disassembler to reading at most the given number of
+    bytes from a binary input file. The count is hexadecimal and must be
+    attached to the option letter, in the same style as -x, ie: -z1000 reads at
+    most 1000 hex bytes. Used together with -k it bounds a window into a larger
+    image (see the -k option above for an example); used on its own it simply
+    truncates the input. <br>
+    <br>
+    The -z option applies only to binary input (the -b option) and to CP/M .com
+    input (the -C option). It is ignored when reading an Intel hex file. If the
+    option is given with no value, the whole file is read. <br>
     <em><br>
       Control File Directives<br>
       <br>
