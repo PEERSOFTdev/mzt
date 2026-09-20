@@ -56,7 +56,10 @@
 #define	ALPHA		1
 //#define	BETA		1
 
-#define	YEAR		2026
+// YEAR is the original author's copyright year, as printed in the
+// version banner; PSYEARS covers the PEERSOFT modifications only.
+#define	YEAR		2008
+#define	PSYEARS		"2021-2026"
 
 #ifndef	TRUE
 #define	TRUE		1

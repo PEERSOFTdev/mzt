@@ -194,7 +194,9 @@ void version()
 #endif
 #endif
 	        "\nCopyright (C) %d by P. Betti <pbetti@lpconsul.net>\n"
-	        "Enhanced by PEERSOFT to add support for 64180\n"
+	        "Copyright (C) %s by PEERSOFT "
+	        "<97554883+PEERSOFTdev@users.noreply.github.com>\n"
+	        "  HD64180/Z180 support, windowed binary reads, tracer fixes\n"
 	        "Original copyrights: (C) 1990-2007 by J. L. Post for D52 code\n"
 	        "Bruce Norskog, Tim Mann, Mark Rison, Thierry Jouin and others for ZMAC code%s\n",
 	        DVERSION, MAJORREV, MINORREV,
@@ -205,7 +207,7 @@ void version()
 	        BETA,
 #endif
 #endif
-	        YEAR, licenseText );
+	        YEAR, PSYEARS, licenseText );
 }
 
 //
