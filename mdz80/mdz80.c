@@ -454,8 +454,6 @@ int main( int argc, char *argv[] )
 		if (fileflag == CPMFILE) printf("CP/M mode is ON.\n");
 		if (strcmp(defbstr, "db") == 0) printf("Using short form for defs.\n");
 		if (offset > 0) printf("Adding offset %04X to source.\n", offset);
-		if (skipbytes > 0) printf("Skipping %04X bytes at start of input file.\n", skipbytes);
-		if (maxbytes > 0) printf("Reading at most %04X bytes from input file.\n", maxbytes);
 		if (equflag == TRUE) printf("Processing symbols from asm source [%s]\n", esrc);
 		printf("\n");
 	}
@@ -683,6 +681,16 @@ int readfile( char *filename )
 	readsize = MAX_LINE;
 
 	if ( fileflag == BINFILE || fileflag == CPMFILE ) {		// if binary file...
+		// reported here rather than with the other -v status lines, as
+		// fileflag is only resolved once the input file has been opened
+		if ( verbose ) {
+			if ( skipbytes )
+				printf( "Skipping %04X bytes at start of input file.\n", skipbytes );
+
+			if ( maxbytes )
+				printf( "Reading at most %04X bytes from input file.\n", maxbytes );
+		}
+
 		if ( skipbytes )
 			fseek( fp, skipbytes, SEEK_SET );		// start of the requested window
 
