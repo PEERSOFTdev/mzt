@@ -19,6 +19,12 @@
  ***************************************************************************/
 
 /*
+ *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
+ *   Added -1 (HD64180/Z180) and -k/-z (windowed binary read) options;
+ *   updated version banner and usage text.
+ */
+
+/*
  * Z80 Disassembler
  * Copyright (C) 1990-2007 by Jeffery L. Post
  * j_post <AT> pacbell <DOT> net

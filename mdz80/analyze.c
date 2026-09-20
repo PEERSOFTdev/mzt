@@ -19,6 +19,12 @@
  ***************************************************************************/
 
 /*
+ *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
+ *   Tracer fixes: correct instruction length for CB/DD/ED/FD-prefixed
+ *   opcodes, and IX/IY operand offsets in register tracking.
+ */
+
+/*
  * DZ80 Z80 Disassembler
  * Copyright (C) 1995-2007 by Jeffery L. Post
  * j_post <AT> pacbell <DOT> net

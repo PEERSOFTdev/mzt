@@ -19,6 +19,11 @@
  ***************************************************************************/
 
 /*
+ *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
+ *   HD64180/Z180 mnemonics added to the shared ED-opcode table.
+ */
+
+/*
  * Z80 Disassembler
  * Copyright (C) 1990-2007 by Jeffery L. Post
  * j_post <AT> pacbell <DOT> net

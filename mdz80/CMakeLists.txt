@@ -1,3 +1,6 @@
+# Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
+# Build opcodes_z180.c for HD64180/Z180 support.
+
 project(mdz80)
 
 cmake_minimum_required(VERSION 2.8)

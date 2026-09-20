@@ -19,6 +19,11 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+/*
+ *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
+ *   Cpu-type declarations, replacing the 8080-only flag.
+ */
+
 
 /*
  * Z80 Disassembler

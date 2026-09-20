@@ -19,6 +19,11 @@
  ***************************************************************************/
 
 /*
+ *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
+ *   Declare prefixedLength().
+ */
+
+/*
  * D52 8052 Disassembler
  * Copyright (C) 1995-2007 by Jeffery L. Post
  * j_post <AT> pacbell <DOT> net
