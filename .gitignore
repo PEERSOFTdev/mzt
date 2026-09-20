@@ -1,1 +1,16 @@
+# Build tree (created by the top-level Makefile / CMake)
 build/
+
+# Third-party reference material, not part of MZT and not redistributable:
+# Cameron W. Cotrill's 1988 "Z80 and 64180 Assembly Language Help Guide",
+# (c)1988 All Rights Reserved. Kept locally as a reference only.
+Z80HELP/
+Z80HELP.LBR
+
+# ROM images and disassembler working files. ROM dumps are third-party
+# firmware (e.g. Robotron) and must not be committed.
+*.rom
+*.asm
+*.ctl
+*.ctl.backup
+*.z80
