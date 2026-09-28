@@ -21,7 +21,8 @@
 /*
  *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
  *   Tracer fixes: correct instruction length for CB/DD/ED/FD-prefixed
- *   opcodes, and IX/IY operand offsets in register tracking.
+ *   opcodes, and IX/IY operand offsets in register tracking. Support
+ *   for routines that take their argument inline, after the call.
  */
 
 /*
@@ -97,6 +98,9 @@ int	astackPtr = 0;
 int	astack[STACK_DEPTH];		// analysis stack, for returns and branches
 int	vstackPtr = 0;
 int	vstack[STACK_DEPTH];		// possible vector references stack
+struct inlineroutine inlineTable[MAX_INLINE];
+int	inlineCount = 0;
+bool	inlineDetect = TRUE;		// -i switches detection off
 char	alertMessage[128];
 
 FILE	* ctlfp;
@@ -492,6 +496,250 @@ int prefixedLength( int adrs )
 	return 2;				// cb xx is always two bytes
 }
 
+// ---- routines that take their argument inline, after the call ----------
+//
+// A call to such a routine is followed by data, not code: the callee lifts
+// the return address off the stack, walks it past the argument and jumps
+// back. Getting this wrong makes the tracer walk into the text and tag it
+// as code, which is what happens without this.
+//
+// Routines are either declared in the control file ('r' directive) or
+// detected here. Detection can only work when the callee is inside the
+// loaded image; a call into a ROM we do not have can only be declared.
+
+void addInlineRoutine( int adrs, int kind, int len, bool declared )
+{
+	int	i;
+
+	for ( i = 0; i < inlineCount; i++ ) {		// already known?
+		if ( inlineTable[i].adrs == adrs ) {
+			if ( declared || !inlineTable[i].declared ) {
+				inlineTable[i].kind = kind;	// a declaration wins
+				inlineTable[i].len = len;
+				inlineTable[i].declared = declared;
+			}
+
+			return;
+		}
+	}
+
+	if ( inlineCount >= MAX_INLINE ) {
+		analysisWarning( "too many inline-data routines!" );
+		return;
+	}
+
+	inlineTable[inlineCount].adrs = adrs;
+	inlineTable[inlineCount].kind = kind;
+	inlineTable[inlineCount].len = len;
+	inlineTable[inlineCount].declared = declared;
+	inlineCount++;
+}
+
+// Declared byte count for an INLINE_FIXED routine; zero for the rest.
+
+static int inlineFixedLen( int adrs )
+{
+	int	i;
+
+	for ( i = 0; i < inlineCount; i++ )
+		if ( inlineTable[i].adrs == adrs )
+			return inlineTable[i].len;
+
+	return 0;
+}
+
+// Length in bytes of the instruction at 'adrs', prefixed or not.
+
+static int insnLength( int adrs )
+{
+	int	code = pgmmem[adrs] & 0xff;
+
+	if ( code == 0xcb || code == 0xdd || code == 0xed || code == 0xfd )
+		return prefixedLength( adrs );
+
+	return ( opttbl[code] & OPT_SIZE ) + 1;
+}
+
+// Does the routine at 'pc' look like it takes its argument inline?
+//
+// The signature is narrow on purpose: the return address must be taken off
+// the stack by the very first instruction, control must leave through an
+// indirect jump (or a pushed address and a ret), and the body must show how
+// the argument ends. Anything less and we report nothing, because guessing
+// wrong turns real code into text, which is worse than the original fault.
+
+static int detectInline( int pc )
+{
+	int	code, steps, exit_seen = 0, push_seen = 0;
+	int	count_seen = 0, zero_seen = 0, bit7_seen = 0, dollar_seen = 0;
+
+	if ( pc < offset || pc >= himark )		// not in the loaded image
+		return INLINE_NONE;
+
+	code = pgmmem[pc] & 0xff;			// pop rr, or ex (sp),hl
+
+	if ( code != 0xc1 && code != 0xd1 && code != 0xe1 && code != 0xf1 && code != 0xe3 )
+		return INLINE_NONE;
+
+	for ( steps = 0; steps < INLINE_SCAN && pc < himark; steps++ ) {
+		code = pgmmem[pc] & 0xff;
+
+		if ( code == 0xe9 ) {			// jp (hl)
+			exit_seen = 1;
+			break;
+		}
+
+		if ( ( code == 0xdd || code == 0xfd ) && ( pgmmem[pc + 1] & 0xff ) == 0xe9 ) {
+			exit_seen = 1;			// jp (ix) / jp (iy)
+			break;
+		}
+
+		if ( code == 0xc9 ) {			// ret - only an exit if an
+			exit_seen = push_seen;		// address was pushed back
+			break;
+		}
+
+		if ( code == 0xe5 || code == 0xd5 )	// push hl / push de
+			push_seen = 1;
+
+		// How does the argument end? A routine that moves the first
+		// byte into a counting register is reading a length, even if
+		// it also tests it for zero first - plenty of them special
+		// case the empty string that way. So a count outranks a zero
+		// test, and is only believed near the entry, before the
+		// routine has had a chance to reuse b or c for anything else.
+		if ( code == 0xed && ( pgmmem[pc + 1] & 0xff ) == 0xb0 )
+			count_seen = 1;			// ldir
+		else if ( steps < 8 && ( code == 0x47 || code == 0x4f ) )
+			count_seen = 1;			// ld b,a / ld c,a
+		else if ( steps < 8 && ( code == 0x46 || code == 0x4e ) )
+			count_seen = 1;			// ld b,(hl) / ld c,(hl)
+		else if ( code == 0xfe && ( pgmmem[pc + 1] & 0xff ) == '$' )
+			dollar_seen = 1;
+		else if ( code == 0xcb && ( pgmmem[pc + 1] & 0xff ) == 0x7f )
+			bit7_seen = 1;			// bit 7,a
+		else if ( code == 0xe6 && ( pgmmem[pc + 1] & 0xff ) == 0x80 )
+			bit7_seen = 1;			// and 80h
+		else if ( code == 0xb7 )
+			zero_seen = 1;			// or a
+		else if ( code == 0xfe && !( pgmmem[pc + 1] & 0xff ) )
+			zero_seen = 1;			// cp 0
+
+		pc += insnLength( pc );
+	}
+
+	if ( !exit_seen )
+		return INLINE_NONE;
+
+	if ( count_seen )
+		return INLINE_LEN;
+
+	if ( dollar_seen )
+		return INLINE_DOLLAR;
+
+	if ( bit7_seen )
+		return INLINE_DC;
+
+	if ( zero_seen )
+		return INLINE_NUL;
+
+	return INLINE_NONE;				// convention undetermined
+}
+
+// What kind of inline argument does a call to 'callee' carry, if any?
+// Detection results are remembered, including the negative ones, so each
+// routine is examined once however many times it is called.
+
+int inlineKindOf( int callee )
+{
+	int	i, kind;
+
+	for ( i = 0; i < inlineCount; i++ )
+		if ( inlineTable[i].adrs == callee )
+			return inlineTable[i].kind;
+
+	if ( !inlineDetect )
+		return INLINE_NONE;
+
+	kind = detectInline( callee );
+
+	if ( kind != INLINE_NONE ) {		// only remember the positives, so
+						// the table holds routines rather
+						// than every address ever called
+		addInlineRoutine( callee, kind, 0, FALSE );
+		printf( "\rinline-data routine detected at %04X\n", callee );
+	}
+
+	return kind;
+}
+
+// Total size of the inline argument at 'adrs', terminator included, or 0
+// if it does not look like one after all.
+
+// Does a run of 'len' bytes at 'adrs' actually read as text? A wrongly
+// classified routine would otherwise swallow whatever follows the call --
+// code included -- up to the next byte that happens to look like a
+// terminator, which is a worse result than not acting at all.
+
+static bool looksLikeText( int adrs, int len )
+{
+	int	i, printable = 0;
+
+	if ( len < 1 )
+		return FALSE;
+
+	for ( i = 0; i < len; i++ ) {
+		int c = pgmmem[adrs + i] & 0x7f;	// bit 7 is a terminator
+							// flag in dc strings
+		if ( isprint( c ) || c == '\r' || c == '\n' || c == '\t' || !c )
+			printable++;
+	}
+
+	return ( printable * 5 >= len * 4 );		// at least four fifths
+}
+
+int inlineArgLength( int adrs, int kind, int len )
+{
+	int	i;
+
+	switch ( kind ) {
+	case INLINE_FIXED:
+		return ( len > 0 && adrs + len <= himark ) ? len : 0;
+
+	case INLINE_LEN:
+		if ( adrs >= himark )
+			return 0;
+
+		len = pgmmem[adrs] & 0xff;	// leading count, then the text
+
+		if ( adrs + len + 1 > himark )
+			return 0;
+
+		return looksLikeText( adrs + 1, len ) ? len + 1 : 0;
+
+	case INLINE_NUL:
+	case INLINE_DOLLAR:
+		for ( i = 0; i < INLINE_MAXLEN && adrs + i < himark; i++ ) {
+			if ( kind == INLINE_NUL && !( pgmmem[adrs + i] & 0xff ) )
+				return looksLikeText( adrs, i ) ? i + 1 : 0;
+
+			if ( kind == INLINE_DOLLAR && ( pgmmem[adrs + i] & 0xff ) == '$' )
+				return looksLikeText( adrs, i ) ? i + 1 : 0;
+		}
+
+		return 0;
+
+	case INLINE_DC:
+		for ( i = 0; i < INLINE_MAXLEN && adrs + i < himark; i++ )
+			if ( pgmmem[adrs + i] & 0x80 )
+				return looksLikeText( adrs, i + 1 ) ? i + 1 : 0;
+
+		return 0;
+	}
+
+	return 0;
+}
+
 // Trace a single thread of code starting at address 'pc'.
 // Return TRUE if error, else return FALSE.
 
@@ -500,7 +748,7 @@ bool trace( int pc )
 	bool done;
 	byte flag;
 	int code, adrs, dest, dptr;
-	int i, plen, pushLevelSave = 0;
+	int i, plen, kind, dlen, pushLevelSave = 0;
 
 	if ( !isTraceableCode( pc ) )			// does not appear to be executable code,
 		return FALSE;				// but this is not an error
@@ -556,6 +804,26 @@ bool trace( int pc )
 			analysisFlags[tpc] = ANALYZE_TAGGED;
 			adrs |= ( ( pgmmem[tpc++] & 0xff ) << 8 );
 			adrs &= WORD_MASK;
+
+			// if the callee takes its argument inline, the bytes
+			// after the call are that argument; execution resumes
+			// past it, not at it
+			kind = inlineKindOf( adrs );
+
+			if ( kind != INLINE_NONE ) {
+				dlen = inlineArgLength( tpc, kind, inlineFixedLen( adrs ) );
+
+				if ( dlen > 0 ) {
+					for ( i = 0; i < dlen; i++ )
+						analysisFlags[tpc + i] =
+						        ( ( kind == INLINE_LEN && !i ) ?
+						          ANALYZE_BINARY : ANALYZE_ASCII )
+						        | ANALYZE_TRACED;
+
+					tpc += dlen;
+				}
+			}
+
 			astack[astackPtr++] = tpc;
 
 			if ( astackPtr > astackMax )
@@ -1210,6 +1478,40 @@ void genAnalysisList( void )
 
 	aflag = lastflag = analysisFlags[0];
 	start = offset;
+
+	for ( i = 0; i < inlineCount; i++ ) {		// routines taking an inline
+		char	type[8];			// argument, so the next run
+							// knows about them too
+		switch ( inlineTable[i].kind ) {
+		case INLINE_NUL:
+			strcpy( type, "z" );
+			break;
+
+		case INLINE_LEN:
+			strcpy( type, "l" );
+			break;
+
+		case INLINE_DC:
+			strcpy( type, "d" );
+			break;
+
+		case INLINE_DOLLAR:
+			strcpy( type, "$" );
+			break;
+
+		case INLINE_FIXED:
+			sprintf( type, "%X", inlineTable[i].len );
+			break;
+
+		default:
+			continue;
+		}
+
+		sprintf( ostr, "r %04X,%s\t\t; inline-data routine (%s)",
+		         inlineTable[i].adrs, type,
+		         inlineTable[i].declared ? "declared" : "detected" );
+		addListEntry( ostr );
+	}
 
 	if ( offset > 1 ) {
 		sprintf( ostr, "i 0000-%04X\t; Invalid data", offset - 1 );

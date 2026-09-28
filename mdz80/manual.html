@@ -328,6 +328,13 @@
     option nor the -h option are specified, the disassembler will first search
     for a file with an extention of '.hex', and if not found, will then search
     for a binary file with an extention of '.bin'.&nbsp;
+    <h4><em>-i (do not detect inline-data routines)</em></h4>
+    During a trace (the -t option) the disassembler looks for routines that
+    take their argument inline, immediately after the call, and treats the
+    bytes following each such call as data rather than code. See the R
+    directive below for what these routines are and how they are recognised.
+    The -i option turns that detection off, leaving only the routines you
+    declare yourself with an R directive.<br>
     <h4><em>-k (skip bytes at start of binary input file)</em></h4>
     This option causes the disassembler to skip a number of bytes at the start
     of a binary input file before reading begins. The count is hexadecimal and
@@ -1134,6 +1141,79 @@
     not as a comment. You could, for instance, patch in a macro definition or an
     include statement. Patching in executable code is not a real good
     idea.&nbsp;
+    <h4><em>R Directive (routine with an inline argument)</em></h4>
+    A common idiom in Z80 code is to pass a string to a routine by placing it
+    immediately after the call:
+    <table summary="" cellspacing="5">
+      <tbody>
+        <tr>
+          <td><br>
+          </td>
+          <td><br>
+          </td>
+          <td>CALL PRINT<br>
+            DEFB 'Hello',0<br>
+            ... execution continues here<br>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    The routine lifts its return address off the stack, steps it past the
+    string and jumps back, so the bytes after the call are data, not code. A
+    disassembler that does not know this walks straight into the text and
+    disassembles it as instructions, and everything after it is misaligned
+    until the tracer happens to resynchronise.<br>
+    <br>
+    The R directive names such a routine and says how its argument ends:
+    <table summary="" cellspacing="5">
+      <tbody>
+        <tr>
+          <td><br>
+          </td>
+          <td>r EBFA,z</td>
+          <td>argument is terminated by a 00 byte</td>
+        </tr>
+        <tr>
+          <td><br>
+          </td>
+          <td>r 054E,l</td>
+          <td>a leading length byte, then that many characters (Turbo Pascal style)</td>
+        </tr>
+        <tr>
+          <td><br>
+          </td>
+          <td>r 1234,d</td>
+          <td>bit 7 is set on the last character (a 'DC' string)</td>
+        </tr>
+        <tr>
+          <td><br>
+          </td>
+          <td>r 1234,$</td>
+          <td>terminated by '$', as used by CP/M BDOS function 9</td>
+        </tr>
+        <tr>
+          <td><br>
+          </td>
+          <td>r 1234,6</td>
+          <td>a fixed count of bytes, given in hexadecimal</td>
+        </tr>
+      </tbody>
+    </table>
+    Unlike the other directives, R is read before the trace begins rather than
+    during pass 0, because the tracer needs it while it is following the code.
+    <br>
+    <br>
+    During a trace the disassembler also tries to recognise these routines on
+    its own, and reports each one it finds. It looks for a routine that takes
+    the return address off the stack in its very first instruction and leaves
+    through <em>jp (hl)</em>, <em>jp (ix)</em>, <em>jp (iy)</em> or a pushed
+    address and a <em>ret</em>, and it works out how the argument ends from
+    what the routine does with the first byte. Detected routines are written
+    back into the control file as R directives, so you can correct or delete
+    any it gets wrong, and the -i option turns the detection off altogether.
+    Detection can only work when the called routine is part of the file being
+    disassembled; a call into a ROM that is not loaded can only be declared.
+    <br>
     <h4><em>S Directive (symbol definition)</em></h4>
     Defines a symbol to the disassembler. Symbols are output to the disassembly
     file whenever the value is encountered in the input file and the symbol

@@ -20,7 +20,7 @@
 
 /*
  *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
- *   Declare prefixedLength().
+ *   Declare prefixedLength(); inline-data routine types and table.
  */
 
 /*
@@ -131,6 +131,30 @@
 
 #define	STACK_DEPTH		1024
 #define	MIN_STR_LEN		2		// minimum number of characters to ID a string
+
+// Routines that take their argument inline, immediately after the call:
+//	CALL print / DB 'text',0 / <execution resumes here>
+// The callee lifts the return address off the stack, steps it past the
+// data and jumps back, so the bytes after the call are data, not code.
+// INLINE_FIXED takes a byte count; the rest are self-delimiting.
+
+#define	INLINE_NONE		0
+#define	INLINE_NUL		1		// terminated by a 00 byte
+#define	INLINE_LEN		2		// leading length byte (Turbo Pascal style)
+#define	INLINE_DC		3		// bit 7 set on the last character
+#define	INLINE_DOLLAR		4		// terminated by '$' (CP/M BDOS 9)
+#define	INLINE_FIXED		5		// fixed byte count
+
+#define	MAX_INLINE		64		// declared + detected routines
+#define	INLINE_SCAN		24		// instructions examined when detecting
+#define	INLINE_MAXLEN		255		// sanity limit on one inline argument
+
+struct inlineroutine {
+	int	adrs;				// entry point of the routine
+	int	kind;				// INLINE_* above
+	int	len;				// byte count, for INLINE_FIXED
+	bool	declared;			// from the control file, not detected
+};
 #define	TRACE_CHECK_LEN		4		// number of code bytes to check for valid code
 
 #define	ANALYZE_NONE		0x00
@@ -168,6 +192,9 @@ extern int	astackPtr;
 extern int	astack[STACK_DEPTH];			// analysis stack, for returns and branches
 extern int	vstackPtr;
 extern int	vstack[STACK_DEPTH];			// possible vector references stack
+extern struct inlineroutine inlineTable[MAX_INLINE];
+extern int	inlineCount;
+extern bool	inlineDetect;			// auto-detect inline-data routines
 extern char	alertMessage[128];
 
 // Prototypes
@@ -178,6 +205,9 @@ extern bool	aPass1(void);
 extern bool	aPass2(void);
 extern bool	trace(int pc);
 extern int	prefixedLength(int adrs);
+extern int	inlineKindOf(int callee);
+extern int	inlineArgLength(int adrs, int kind, int len);
+extern void	addInlineRoutine(int adrs, int kind, int len, bool declared);
 extern bool	isString(int pc, int stop);
 extern bool	isprint7b(byte c, int * is8b);
 extern int	getEndOfString(int pc, int stop);

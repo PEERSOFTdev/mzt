@@ -20,8 +20,9 @@
 
 /*
  *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
- *   Added -1 (HD64180/Z180) and -k/-z (windowed binary read) options;
- *   updated version banner and usage text.
+ *   Added -1 (HD64180/Z180), -k/-z (windowed binary read) and -i (no
+ *   inline-data detection) options; the 'r' control directive; updated
+ *   version banner and usage text.
  */
 
 /*
@@ -178,6 +179,8 @@ void usage( void )
 	        "\t-1 assume Hitachi HD64180/Z180 CPU.\n"
 	        "\t-8 generate 8080 mnemonics.\n"
 	        "\t-T during trace (-t) presume unidentified binary is code\n"
+	        "\t-i during trace (-t) do not auto-detect routines that take\n"
+	        "\t   their argument inline, after the call.\n"
 	        "\nGeneral options:\n"
 	        "\t-v be verbose.\n"
 	        "\t-V print version and exit.\n"
@@ -338,6 +341,9 @@ int main( int argc, char *argv[] )
 				strcpy( ascistr, "db" );
 			} else if ( c == 't' )
 				traceflag = TRUE;
+			// don't guess at inline-data routines
+			else if ( c == 'i' )
+				inlineDetect = FALSE;
 			else if ( c == 'l' )
 				upperflag = FALSE;
 			// add hex offset to program
@@ -455,6 +461,7 @@ int main( int argc, char *argv[] )
 		if (dotpseudo == TRUE) printf("Prefixing defs with a dot.\n");
 		if (traceflag == TRUE) printf("Tracing and analyze mode is ON.\n");
 		if (prsmcode == TRUE) printf("... and presume code for unidentified data.\n");
+		if (inlineDetect == FALSE) printf("Inline-data routine detection is OFF.\n");
 		if (cputype == c_64180) printf("Assuming 64180 CPU.\n");
 		if (cputype == c_8080) printf("Using 8080 mnemonics for output.\n");
 		if (hexflag == TRUE) printf("Including address and data in comments.\n");
@@ -481,6 +488,8 @@ int main( int argc, char *argv[] )
 	comment_list = NULL;
 	icomment_list = NULL;
 	patch_list = NULL;
+
+	getCTLinline();		// inline-data routines, needed during the trace
 
 	if ( traceflag ) {
 		if (verbose) printf( "\nAnalyzing code..." );
@@ -831,6 +840,87 @@ void getCTLoffset( void )
 			fclose( fpc );
 		}
 	}
+}
+
+//
+//	Read 'r' directives from the control file before the trace runs.
+//
+//	The tracer needs to know about inline-data routines while it is
+//	tracing, but the control file is not parsed until pass0, well after
+//	that. So scan for them up front, exactly as the offset is.
+//
+//		r EBFA,z	; argument is a 00-terminated string
+//		r 054E,l	; leading length byte (Turbo Pascal style)
+//		r 1234,d	; bit 7 set on the last character
+//		r 1234,$	; '$'-terminated (CP/M)
+//		r 1234,6	; a fixed count of bytes, in hex
+//
+
+void getCTLinline( void )
+{
+	FILE	*fpc;
+	char	*inp;
+	int	adrs, kind, len;
+
+	fpc = fopen( ctl, "r" );
+
+	if ( !fpc )
+		return;
+
+	while ( !feof( fpc ) ) {
+		inp = fgets( linebuffer, MAX_LINE - 1, fpc );
+
+		if ( !inp )
+			break;
+
+		if ( toupper( *inp ) != 'R' )
+			continue;
+
+		inp++;
+		inp = get_adrs( inp, &adrs );		// entry point of the routine
+
+		while ( *inp == ' ' || *inp == '\t' || *inp == ',' )
+			inp++;
+
+		kind = INLINE_NONE;
+		len = 0;
+
+		switch ( tolower( *inp ) ) {
+		case 'z':
+		case '0':
+			kind = INLINE_NUL;
+			break;
+
+		case 'l':
+			kind = INLINE_LEN;
+			break;
+
+		case 'd':
+			kind = INLINE_DC;
+			break;
+
+		case '$':
+			kind = INLINE_DOLLAR;
+			break;
+
+		default:
+			if ( isxdigit( *inp ) ) {	// a fixed byte count
+				len = atox( inp );
+
+				if ( len > 0 ) {
+					kind = INLINE_FIXED;
+					break;
+				}
+			}
+
+			printf( "\nUnknown inline argument type in '%s'\n", linebuffer );
+			continue;
+		}
+
+		addInlineRoutine( adrs, kind, len, TRUE );
+	}
+
+	fclose( fpc );
 }
 
 //
@@ -2675,6 +2765,9 @@ void pass0( void )
 				text = get_adrs( ( char * ) & linebuffer[1], &start );
 				add_patch( start, text );
 				break;
+			case 'R':					// inline-data routine;
+				break;					// read by getCTLinline()
+
 			case 'S':					// symbol
 				add_entry( start, ltext, SYMBOL_TYPE );
 				break;

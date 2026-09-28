@@ -99,6 +99,12 @@ reasoning and the details.
   prefixed instruction was two bytes long, which desynchronised code/data
   segmentation; IX/IY operand offsets in its register tracking were also wrong.
   ([notes](docs/tracer-prefix-length.md))
+- **Inline-data routines** — calls whose argument follows the call
+  (`CALL PRINT` / `DEFB 'text',0`) are recognised, so the argument is treated
+  as data instead of being disassembled as instructions. A new `r` control
+  directive declares such routines and how their argument ends; during a trace
+  they are also detected automatically where the callee is part of the image.
+  ([notes](docs/inline-data-routines.md))
 - **Documentation and attribution** — the manual now covers `-1`, `-k` and `-z`;
   the version banner gives the original author and the later modifications their
   own copyright lines; modified files carry GPLv3 §5(a) change notices.

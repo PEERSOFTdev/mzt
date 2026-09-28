@@ -21,7 +21,7 @@
 
 /*
  *   Modified 2026 by PEERSOFT <97554883+PEERSOFTdev@users.noreply.github.com>:
- *   Cpu-type declarations, replacing the 8080-only flag.
+ *   Cpu-type declarations, replacing the 8080-only flag; getCTLinline().
  */
 
 
@@ -202,6 +202,7 @@ extern byte	* get_extended_mem(int width);
 extern char	* makeupper(char *str);
 extern int	readfile(char *filename);
 extern void	getCTLoffset(void);
+extern void	getCTLinline(void);
 extern void	getcode(char *from, byte *loc);
 extern char	* get_adrs(char *text, int *val);
 extern void	error(char *str1, char *str2);		// fatal error trap
