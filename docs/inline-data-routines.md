@@ -57,8 +57,9 @@ every `-t` run performs.
 **Automatic detection** in `detectInline()`, for routines that are part of the
 image being disassembled. The signature is deliberately narrow: the return
 address must be taken off the stack by the very first instruction (`POP rr` or
-`EX (SP),HL`), and control must leave through `JP (HL)`/`(IX)`/`(IY)` or a
-pushed address and a `RET`. The convention is then inferred from the body.
+`EX (SP),HL`), and control must leave through `JP (HL)`/`(IX)`/`(IY)`, or a
+`RET` that returns to a pointer the routine put back on the stack — either by
+pushing it, or with a second `EX (SP),HL`. The convention is then inferred from the body.
 Detected routines are reported and written into the control file as `r` lines,
 so the guess is visible and can be corrected or deleted. `-i` disables it.
 
@@ -106,19 +107,48 @@ windows (`-xD000 -k<offset> -z3000`). Measured against the previous build:
 | input | detected | effect |
 | ----- | -------- | ------ |
 | `mem.com` (`-C`) | `054E`, `17BB` | 1906 bytes code → text; text 168 → 1961 |
-| `apps.rom` `-k0` | `EBFA` | 1283 bytes code → text; text 916 → 2110 |
+| `apps.rom` `-k0` | `EBFA`, `EC11` | 1395 bytes code → text; text 916 → 2222 |
 | `apps.rom` `-k3000/-k6000/-k9000` | none | unchanged |
 | `basic.rom` `-k0` | none | unchanged |
 | `opsys.rom` all windows | none | unchanged |
 | `spengine.rom` all windows | none | unchanged |
 
-So one routine in `apps.rom` and two in `mem.com`, with every other window
+So two routines in `apps.rom` and two in `mem.com`, with every other window
 byte-for-byte as before. The `apps.rom` call sites and their printer both live
 in the first window; the later windows contain no calls to it.
 
 Also checked: `-i` suppresses detection while still honouring an `r`
 declaration; `r` lines round-trip through repeated `-t` runs; and synthetic
 images covering the NUL and length-prefixed conventions disassemble correctly.
+
+## Surveying the other images
+
+Rather than trusting the absence of detections, every address actually called
+from a region `mdz80` considers code was examined for the signature. That
+survey paid for itself twice.
+
+It found `EC11` in `apps.rom` — 10 call sites, a body byte-for-byte identical
+to `EBFA`'s — rejected purely because it restores the return pointer with a
+second `EX (SP),HL` and returns, where `EBFA` happens to contain a stray
+`PUSH HL` that the old rule accepted. That is why the `EX (SP),HL` exit is now
+recognised.
+
+It also found a family in `apps.rom` — `FA92` and `FA97` in the first window
+(31 call sites), `EAD3` and `EAD8` in the third (42 sites) — shaped
+`POP HL` / `LD C,flag` / `CALL worker` / `JP (HL)`, where each worker sets
+`B` and ends in `JP C142`, a BIOS device-control entry outside the loaded
+window. The convention cannot be read out of the routine, because the code
+that walks the argument is the BIOS.
+
+It can be read out of the *data*, though: all 73 call sites are followed by
+printable text ending in a `00` byte, and in every case the bytes after that
+terminator resume as plausible code (`CALL F895`, `LD HL,DDFF`, `JP E9D3`,
+`CALL EB98`). So the BIOS call returns `HL` past the string. Declaring the
+four with `r FA92,z`, `r FA97,z`, `r EAD3,z`, `r EAD8,z` recovers a further
+664 bytes in the first window and 1355 in the third.
+
+These are the strongest argument for keeping the `r` directive: no amount of
+inspection of the callee could have settled it.
 
 ## Known limitations / TBD
 
@@ -136,6 +166,12 @@ images covering the NUL and length-prefixed conventions disassemble correctly.
   `D443` is one — are deliberately not detected, because they are hard to tell
   apart from a length prefix without following the return pointer properly.
   Declare them with a fixed count, `r D443,1`.
+- Detection reads only the callee. When the argument is walked by code
+  outside the window — the `C142` BIOS family above — nothing in the routine
+  says how the argument ends. A future detector could sample the call sites
+  instead and infer the convention from the data: here that would have been
+  conclusive, 73 sites out of 73 agreeing on a `00` terminator with sane code
+  after it. Not built, and it should propose rather than act.
 - Detection cannot reach a callee outside the loaded image — a call into a
   bank or ROM that is not part of the file being disassembled can only be
   declared with `r`. Note that "outside the image" depends entirely on the

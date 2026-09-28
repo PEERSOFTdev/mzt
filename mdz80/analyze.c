@@ -595,13 +595,18 @@ static int detectInline( int pc )
 			break;
 		}
 
-		if ( code == 0xc9 ) {			// ret - only an exit if an
-			exit_seen = push_seen;		// address was pushed back
-			break;
+		if ( code == 0xc9 ) {			// ret - only an exit if the
+			exit_seen = push_seen;		// stepped-on pointer was put
+			break;				// back for the ret to use
 		}
 
 		if ( code == 0xe5 || code == 0xd5 )	// push hl / push de
 			push_seen = 1;
+
+		if ( code == 0xe3 && steps )		// a second ex (sp),hl puts
+			push_seen = 1;			// the advanced pointer back,
+							// so a later ret returns past
+							// the argument
 
 		// How does the argument end? A routine that moves the first
 		// byte into a counting register is reading a length, even if
