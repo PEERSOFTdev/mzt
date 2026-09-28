@@ -572,6 +572,7 @@ static int detectInline( int pc )
 {
 	int	code, steps, exit_seen = 0, push_seen = 0;
 	int	count_seen = 0, zero_seen = 0, bit7_seen = 0, dollar_seen = 0;
+	int	loop_seen = 0;
 
 	if ( pc < offset || pc >= himark )		// not in the loaded image
 		return INLINE_NONE;
@@ -609,7 +610,9 @@ static int detectInline( int pc )
 		// test, and is only believed near the entry, before the
 		// routine has had a chance to reuse b or c for anything else.
 		if ( code == 0xed && ( pgmmem[pc + 1] & 0xff ) == 0xb0 )
-			count_seen = 1;			// ldir
+			loop_seen = 1;			// ldir
+		else if ( code == 0x10 )
+			loop_seen = 1;			// djnz
 		else if ( steps < 8 && ( code == 0x47 || code == 0x4f ) )
 			count_seen = 1;			// ld b,a / ld c,a
 		else if ( steps < 8 && ( code == 0x46 || code == 0x4e ) )
@@ -631,7 +634,11 @@ static int detectInline( int pc )
 	if ( !exit_seen )
 		return INLINE_NONE;
 
-	if ( count_seen )
+	// A count register on its own is not enough: a routine may take a
+	// single inline byte and use it to index a table, which loads it the
+	// same way. Only believe a length prefix when the routine also walks
+	// the argument, with ldir or a djnz loop.
+	if ( count_seen && loop_seen )
 		return INLINE_LEN;
 
 	if ( dollar_seen )

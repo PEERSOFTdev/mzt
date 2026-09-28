@@ -69,6 +69,19 @@ recorded every examined call target, positive or not, and a 64-entry table
 overflowed almost immediately on a real program. Only positives are stored now;
 re-examining a non-inline routine costs at most 24 decoded instructions.
 
+**A count register alone does not mean a length prefix.** `basic.rom` has a
+routine at `D443` that does `EX (SP),HL` / `LD C,(HL)` / `INC HL` /
+`EX (SP),HL` — it takes a *single* inline byte and uses it to index a table,
+advancing the return address by exactly one. The count-evidence rule read
+`LD C,(HL)` as a length prefix and swallowed the following eight bytes. An
+`ADD HL,BC` appears in that routine too, but on the table pointer rather than
+the return address, so it is no help as a discriminator. What the genuine
+length-prefixed routines have and this one does not is a loop over the
+argument: `mem.com`'s `054E` uses `LDIR`, its `17BB` uses `DJNZ`. A length
+prefix is therefore only believed when a count register *and* one of those
+appear. `D443` now goes undetected, which is the right outcome — it can be
+declared with `r D443,1` if its single byte should be marked.
+
 **A count is not a terminator.** `mem.com`'s routine at `17BB` reads its first
 byte, tests it with `OR A` and branches away if zero, *then* moves it into `B`
 as a count — it special-cases the empty string. The first detector saw the zero
@@ -77,26 +90,35 @@ test and called it NUL-terminated, which made one call site swallow 215 bytes
 is a worse failure than the original bug, so:
 
 - evidence that the first byte becomes a *count* (`LD B,A`, `LD C,A`,
-  `LD B,(HL)`, `LD C,(HL)` near the entry, or `LDIR`) now outranks a zero test;
+  `LD B,(HL)`, `LD C,(HL)` near the entry) now outranks a zero test — but only
+  counts as a length prefix when the routine also *walks* the argument, with
+  `LDIR` or a `DJNZ` loop (see the third mistake below);
 - `looksLikeText()` rejects any argument that is not at least four fifths
   printable, so a misjudged routine falls back to the previous behaviour
   instead of eating code.
 
 ## Verification
 
-- `mem.com` (`-C -l -t`): both inline-data routines detected unaided; 1906
-  bytes reclassified from code to text; the call/string chains segment cleanly
-  as length byte, text, code, repeating.
-- `apps.rom` (`-b -l -t -xD000`): the routine at `EBFA` is detected unaided and
-  1283 bytes are reclassified from code to text, the strings at `D162` onward
-  among them. No `r` directive is needed for this file.
-- `basic.rom`, `opsys.rom`, `spengine.rom`: no inline-data routine detected and
-  output byte-for-byte identical to the previous build. Note these particular
-  comparisons were run at offset 0 for `basic.rom` and `opsys.rom`, whose load
-  addresses were not established; a wrong base hides both call sites and
-  callees, so they say less than they appear to.
-- Synthetic images covering the NUL and length-prefixed conventions; `-i`
-  suppresses detection; `r` lines round-trip through repeated `-t` runs.
+These images map at `D000` through the HD64180 CBR, a 4K page at a time, and
+are larger than the window they map into, so they are disassembled in 12K
+windows (`-xD000 -k<offset> -z3000`). Measured against the previous build:
+
+| input | detected | effect |
+| ----- | -------- | ------ |
+| `mem.com` (`-C`) | `054E`, `17BB` | 1906 bytes code → text; text 168 → 1961 |
+| `apps.rom` `-k0` | `EBFA` | 1283 bytes code → text; text 916 → 2110 |
+| `apps.rom` `-k3000/-k6000/-k9000` | none | unchanged |
+| `basic.rom` `-k0` | none | unchanged |
+| `opsys.rom` all windows | none | unchanged |
+| `spengine.rom` all windows | none | unchanged |
+
+So one routine in `apps.rom` and two in `mem.com`, with every other window
+byte-for-byte as before. The `apps.rom` call sites and their printer both live
+in the first window; the later windows contain no calls to it.
+
+Also checked: `-i` suppresses detection while still honouring an `r`
+declaration; `r` lines round-trip through repeated `-t` runs; and synthetic
+images covering the NUL and length-prefixed conventions disassemble correctly.
 
 ## Known limitations / TBD
 
@@ -110,6 +132,10 @@ is a worse failure than the original bug, so:
 - The conventions are inferred from a peephole over the callee's first 24
   instructions. A routine that sets up its counter unusually, or ends the
   argument in a way not listed above, will be missed; declare it instead.
+- Routines taking a single inline byte rather than a string — `basic.rom`'s
+  `D443` is one — are deliberately not detected, because they are hard to tell
+  apart from a length prefix without following the return pointer properly.
+  Declare them with a fixed count, `r D443,1`.
 - Detection cannot reach a callee outside the loaded image — a call into a
   bank or ROM that is not part of the file being disassembled can only be
   declared with `r`. Note that "outside the image" depends entirely on the
