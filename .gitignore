@@ -10,6 +10,8 @@ Z80HELP.LBR
 # ROM images and disassembler working files. ROM dumps are third-party
 # firmware (e.g. Robotron) and must not be committed.
 *.rom
+# root only, so mdz80/clock.com (part of the package) stays tracked
+/*.com
 *.asm
 *.ctl
 *.ctl.backup
