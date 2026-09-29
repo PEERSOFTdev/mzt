@@ -1214,6 +1214,37 @@
     Detection can only work when the called routine is part of the file being
     disassembled; a call into a ROM that is not loaded can only be declared.
     <br>
+    <br>
+    Some routines have the shape of an inline-data routine -- they take the
+    return address off the stack and leave indirectly -- while the code that
+    actually walks the argument sits in a BIOS or another bank, where the
+    disassembler cannot read it. For these the convention is worked out from
+    the call sites instead: each terminator is tried against every call site
+    that was traced, and one is suggested only when no site contradicts it and
+    at least two carry an argument long enough to judge. A site is taken as
+    agreeing only if the byte after the terminator could begin an instruction,
+    which is what tells a real string from a run of bytes that happens to look
+    like one.
+    <br>
+    <br>
+    Nothing is acted on. The suggestion is written into the control file as a
+    commented-out R directive with the evidence behind it:
+    <table summary="" cellspacing="5">
+      <tbody>
+        <tr>
+          <td><br>
+          </td>
+          <td>;r FA92,z&nbsp;&nbsp;&nbsp;&nbsp;; SUGGESTED: 23 call sites, 23
+            strings, avg 19 chars, no counter-example. Remove the ';' to
+            accept.</td>
+        </tr>
+      </tbody>
+    </table>
+    Accept it by deleting the semicolon -- a find and replace of ';r ' with
+    'r ' takes every suggestion in the file at once -- and run the
+    disassembler again. Delete the line instead to reject it; it will be
+    suggested again on the next trace, since the evidence has not changed.
+    <br>
     <h4><em>S Directive (symbol definition)</em></h4>
     Defines a symbol to the disassembler. Symbols are output to the disassembly
     file whenever the value is encountered in the input file and the symbol

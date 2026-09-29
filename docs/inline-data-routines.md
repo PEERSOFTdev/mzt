@@ -150,6 +150,73 @@ four with `r FA92,z`, `r FA97,z`, `r EAD3,z`, `r EAD8,z` recovers a further
 These are the strongest argument for keeping the `r` directive: no amount of
 inspection of the callee could have settled it.
 
+## Inferring a convention from the call sites
+
+The `C142` family showed that a routine can have the right shape while the
+code that walks its argument sits in a BIOS the disassembler cannot read. For
+those the call sites are the only evidence, and they turn out to be plenty.
+
+A routine that matches the shape but yields no convention becomes a
+*candidate*, and the tracer records where it was called from. When the trace
+finishes, each terminator is tried against every recorded site. A site
+**agrees** if the argument is at least three characters, at least 60% plain
+ASCII, and — the load-bearing part — the byte after the terminator could begin
+an instruction. Guess the wrong terminator and the resume point lands
+mid-instruction, so that one check is what separates a real string from a run
+of bytes that merely looks like one. A site **contradicts** if the scan runs
+into a control byte with no terminator, or the resume point is implausible. A
+convention is suggested only when nothing contradicts it and at least two
+sites agree; a one or two character argument is counted as neither.
+
+Nothing is acted on. A commented directive goes into the control file with
+the evidence behind it, so a five-site suggestion can be judged differently
+from a twenty-nine-site one:
+
+```
+;r FA92,z    ; SUGGESTED: 23 call sites, 23 strings, avg 19 chars, no counter-example. Remove the ';' to accept.
+```
+
+Accepting is `sed 's/^;r /r /'` over the control file, which is what makes 29
+call sites a single edit. `getCTLinline()` ignores comment lines, so a
+suggestion is inert until the semicolon goes; once it does, the line is read
+as a declaration and re-emitted as an accepted one, not suggested again.
+
+A string bound for a terminal carries the occasional control code, so
+aborting the scan at the first one loses real strings: `opsys.rom`'s `E794`
+prints `ESC * "EurekaDOS"`, and that single `1B` byte was enough to
+contradict the convention and suppress the whole routine. Control codes get a
+budget of two rather than free rein — machine code is full of bytes below
+`20h`, so anything beyond a couple is good evidence this is not text. Raising
+it from zero to two admitted `E794` and produced no other suggestion on any
+image.
+
+Four versions of the scoring were wrong before this one, each plausible:
+masking bit 7 before testing printability turned Czech national characters
+into control codes and suppressed every suggestion; finding call sites by
+scanning for `CD` bytes invented phantom sites inside text; and requiring
+every site to agree threw away `EAD3`, whose 29 sites include three arguments
+of one or two characters that are legitimate but too short to judge. Hence
+contradictions rather than unanimity, and a scan that does not strip bit 7.
+
+Note that scoring deliberately does **not** reuse `inlineArgLength()`. That
+function guards the path that acts and has to stay strict about what it will
+swallow; scoring only decides whether the sites agree, and has the resume
+check to keep it honest.
+
+What it suggests on the images to hand, none of it acted on:
+
+| image | window | suggestion | evidence |
+| ----- | ------ | ---------- | -------- |
+| `apps.rom` | `-k0` | `FA92,z`, `FA97,z` | 23 and 7 sites, no counter-example |
+| `apps.rom` | `-k6000` | `EAD3,z`, `EAD8,z` | 29 and 13 sites |
+| `opsys.rom` | `-k0` | `E794,z`, `F01E,z` | 3 and 5 sites |
+| `opsys.rom` | `-k3000` | `E46E,z` | 10 sites |
+| `mem.com` | — | `14BB,z` | 8 sites, 6 strings, avg 4 chars |
+
+Accepting the two in `apps.rom -k6000` takes that window from 377 bytes of
+text to 1605. Disassembly output is byte-for-byte unchanged until a
+suggestion is accepted.
+
 ## Known limitations / TBD
 
 - Only the `CALL` path is handled. The same idiom after `RST n` — common in
@@ -167,11 +234,8 @@ inspection of the callee could have settled it.
   apart from a length prefix without following the return pointer properly.
   Declare them with a fixed count, `r D443,1`.
 - Detection reads only the callee. When the argument is walked by code
-  outside the window — the `C142` BIOS family above — nothing in the routine
-  says how the argument ends. A future detector could sample the call sites
-  instead and infer the convention from the data: here that would have been
-  conclusive, 73 sites out of 73 agreeing on a `00` terminator with sane code
-  after it. Not built, and it should propose rather than act.
+  outside the window, nothing in the routine says how the argument ends —
+  that is what the call-site inference below is for.
 - Detection cannot reach a callee outside the loaded image — a call into a
   bank or ROM that is not part of the file being disassembled can only be
   declared with `r`. Note that "outside the image" depends entirely on the

@@ -149,6 +149,28 @@
 #define	INLINE_SCAN		24		// instructions examined when detecting
 #define	INLINE_MAXLEN		255		// sanity limit on one inline argument
 
+// A routine may have the shape of an inline-data routine -- it takes the
+// return address off the stack and leaves indirectly -- while the code that
+// walks the argument sits somewhere we cannot see, in a BIOS or another
+// bank. The convention can still be recovered from the call sites: collect
+// them during the trace, then see which terminator every one of them agrees
+// with. Nothing is acted on; a commented 'r' line is written to the control
+// file for the user to confirm.
+
+#define	MAX_CANDIDATES		32		// routines awaiting confirmation
+#define	MAX_CAND_SITES		64		// call sites sampled per routine
+#define	MIN_CAND_STRINGS	2		// informative sites needed to suggest
+#define	MIN_CAND_LEN		3		// shorter arguments say nothing either way
+
+struct inlinecandidate {
+	int	adrs;
+	int	nsites;				// call sites seen (capped)
+	int	sites[MAX_CAND_SITES];		// address of each argument
+	int	kind;				// suggested convention, or INLINE_NONE
+	int	strings;			// sites that confirmed it
+	int	avg;				// their average length
+};
+
 struct inlineroutine {
 	int	adrs;				// entry point of the routine
 	int	kind;				// INLINE_* above
@@ -195,6 +217,8 @@ extern int	vstack[STACK_DEPTH];			// possible vector references stack
 extern struct inlineroutine inlineTable[MAX_INLINE];
 extern int	inlineCount;
 extern bool	inlineDetect;			// auto-detect inline-data routines
+extern struct inlinecandidate candTable[MAX_CANDIDATES];
+extern int	candCount;
 extern char	alertMessage[128];
 
 // Prototypes
@@ -205,9 +229,10 @@ extern bool	aPass1(void);
 extern bool	aPass2(void);
 extern bool	trace(int pc);
 extern int	prefixedLength(int adrs);
-extern int	inlineKindOf(int callee);
+extern int	inlineKindOf(int callee, int adrs);
 extern int	inlineArgLength(int adrs, int kind, int len);
 extern void	addInlineRoutine(int adrs, int kind, int len, bool declared);
+extern void	inlineSuggest(void);
 extern bool	isString(int pc, int stop);
 extern bool	isprint7b(byte c, int * is8b);
 extern int	getEndOfString(int pc, int stop);

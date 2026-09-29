@@ -101,6 +101,8 @@ int	vstack[STACK_DEPTH];		// possible vector references stack
 struct inlineroutine inlineTable[MAX_INLINE];
 int	inlineCount = 0;
 bool	inlineDetect = TRUE;		// -i switches detection off
+struct inlinecandidate candTable[MAX_CANDIDATES];
+int	candCount = 0;
 char	alertMessage[128];
 
 FILE	* ctlfp;
@@ -568,7 +570,7 @@ static int insnLength( int adrs )
 // the argument ends. Anything less and we report nothing, because guessing
 // wrong turns real code into text, which is worse than the original fault.
 
-static int detectInline( int pc )
+static int detectInline( int pc, int *structural )
 {
 	int	code, steps, exit_seen = 0, push_seen = 0;
 	int	count_seen = 0, zero_seen = 0, bit7_seen = 0, dollar_seen = 0;
@@ -639,6 +641,9 @@ static int detectInline( int pc )
 	if ( !exit_seen )
 		return INLINE_NONE;
 
+	if ( structural )			// shape is right; the convention
+		*structural = 1;		// may still be undetermined
+
 	// A count register on its own is not enough: a routine may take a
 	// single inline byte and use it to index a table, which loads it the
 	// same way. Only believe a length prefix when the routine also walks
@@ -662,9 +667,199 @@ static int detectInline( int pc )
 // Detection results are remembered, including the negative ones, so each
 // routine is examined once however many times it is called.
 
-int inlineKindOf( int callee )
+// Remember where a candidate was called from, so its argument can be
+// examined once the trace has finished.
+
+static void addCandidateSite( int callee, int adrs )
 {
-	int	i, kind;
+	int	i;
+
+	for ( i = 0; i < candCount; i++ )
+		if ( candTable[i].adrs == callee )
+			break;
+
+	if ( i == candCount ) {
+		if ( candCount >= MAX_CANDIDATES )
+			return;
+
+		candTable[i].adrs = callee;
+		candTable[i].nsites = 0;
+		candTable[i].kind = INLINE_NONE;
+		candCount++;
+	}
+
+	if ( candTable[i].nsites < MAX_CAND_SITES )
+		candTable[i].sites[candTable[i].nsites++] = adrs;
+}
+
+// Is this byte plausible inside a text argument? National characters live
+// above 7f in the code pages these ROMs use, so bit 7 is not stripped --
+// doing so turns an accented letter into a control code and aborts the scan.
+
+static bool inlineTextByte( int c )
+{
+	c &= 0xff;
+
+	return ( c >= 0x20 && c < 0x7f ) || c == '\t' || c == '\n' || c == '\r' || c >= 0x80;
+}
+
+// Strings for a terminal carry the odd control code -- an escape sequence
+// introducer, a form feed -- so aborting on the first one loses real strings.
+// They get a small budget rather than free rein: machine code is full of
+// bytes below 20h, so anything more than a couple of them is a good sign
+// this is not text at all.
+
+#define	INLINE_MAXCTRL		2
+
+// Could this byte begin an instruction? Guessing the wrong terminator leaves
+// the resume point in the middle of one, so this is what separates a real
+// string from a run of bytes that merely looks like one.
+
+static bool inlineResumeByte( int c )
+{
+	static const byte common[] = {
+		0xc3, 0xcd, 0xc9, 0x21, 0x11, 0x01, 0x31, 0x3e, 0x06, 0x0e,
+		0x16, 0x1e, 0x2a, 0x32, 0x3a, 0x22, 0xaf, 0xb7, 0x18, 0x20,
+		0x28, 0x30, 0x38, 0xfe, 0xcb, 0xed, 0xdd, 0xfd, 0x7e, 0x23,
+		0xe1, 0xc5, 0xd5, 0xe5, 0xf5, 0xc1, 0xd1, 0xf1, 0x00
+	};
+	int	i;
+
+	for ( i = 0; common[i]; i++ )
+		if ( ( c & 0xff ) == common[i] )
+			return TRUE;
+
+	return FALSE;
+}
+
+// Test one convention against every recorded call site of a candidate.
+// Returns the number of sites that contradict it; 'strings' and 'avg' report
+// the sites long enough to be worth anything. A one or two character
+// argument neither confirms nor contradicts.
+
+static int inlineScore( struct inlinecandidate *c, int kind, int *strings, int *avg )
+{
+	int	i, n, adrs, len, ascii, term, ctrl, bad = 0, total = 0;
+
+	*strings = 0;
+	*avg = 0;
+
+	for ( i = 0; i < c->nsites; i++ ) {
+		adrs = c->sites[i];
+		len = -1;
+
+		// Measure the argument here rather than with inlineArgLength().
+		// That one guards the acting path and must stay strict about
+		// what it will swallow; this one only has to decide whether the
+		// call sites agree, and it has the resume check below to keep
+		// it honest. It also must not strip bit 7: national characters
+		// live above 7f in these code pages.
+		if ( kind == INLINE_LEN ) {
+			if ( adrs < himark ) {
+				n = pgmmem[adrs] & 0xff;
+
+				if ( n > 0 && n < 128 && adrs + n + 1 <= himark ) {
+					for ( term = ctrl = 0; term < n; term++ )
+						if ( !inlineTextByte( pgmmem[adrs + 1 + term] )
+						     && ++ctrl > INLINE_MAXCTRL )
+							break;
+
+					if ( term == n )
+						len = n + 1;
+				}
+			}
+		} else {
+			ctrl = 0;
+
+			for ( n = 0; n < INLINE_MAXLEN && adrs + n < himark; n++ ) {
+				term = pgmmem[adrs + n] & 0xff;
+
+				if ( kind == INLINE_NUL && !term ) {
+					len = n + 1;
+					break;
+				}
+
+				if ( kind == INLINE_DOLLAR && term == '$' ) {
+					len = n + 1;
+					break;
+				}
+
+				if ( kind == INLINE_DC && n && ( term & 0x80 ) ) {
+					len = n + 1;
+					break;
+				}
+
+				if ( !inlineTextByte( term ) && ++ctrl > INLINE_MAXCTRL )
+					break;
+			}
+		}
+
+		if ( len < 1 ) {			// no terminator where one
+			bad++;				// was expected
+			continue;
+		}
+
+		if ( adrs + len >= himark || !inlineResumeByte( pgmmem[adrs + len] ) ) {
+			bad++;				// resumes mid-instruction
+			continue;
+		}
+
+		if ( kind == INLINE_LEN ) {		// step over the count byte
+			adrs++;
+			len--;
+		} else
+			len--;				// and over the terminator
+
+		if ( len < MIN_CAND_LEN )		// too short to judge either
+			continue;			// way, so neither count it
+							// nor hold it against the
+							// convention
+		for ( n = ascii = 0; n < len; n++ )
+			if ( ( pgmmem[adrs + n] & 0xff ) >= 0x20 && ( pgmmem[adrs + n] & 0xff ) < 0x7f )
+				ascii++;
+
+		if ( ascii * 5 < len * 3 ) {		// mostly not plain text
+			bad++;
+			continue;
+		}
+
+		( *strings )++;
+		total += len;
+	}
+
+	if ( *strings )
+		*avg = total / *strings;
+
+	return bad;
+}
+
+// Work out what each candidate's argument looks like, once the trace has
+// finished and its call sites are known.
+
+void inlineSuggest( void )
+{
+	static const int kinds[] = { INLINE_NUL, INLINE_LEN, INLINE_DC, INLINE_DOLLAR, 0 };
+	int	i, k, strings, avg;
+
+	for ( i = 0; i < candCount; i++ ) {
+		for ( k = 0; kinds[k]; k++ ) {
+			if ( inlineScore( &candTable[i], kinds[k], &strings, &avg ) )
+				continue;		// something contradicted it
+
+			if ( strings < MIN_CAND_STRINGS )
+				continue;		// nothing said it was right
+
+			candTable[i].kind = kinds[k];
+			candTable[i].strings = strings;
+			candTable[i].avg = avg;
+			break;
+		}
+	}
+}
+
+int inlineKindOf( int callee, int adrs )
+{
+	int	i, kind, structural = 0;
 
 	for ( i = 0; i < inlineCount; i++ )
 		if ( inlineTable[i].adrs == callee )
@@ -673,14 +868,15 @@ int inlineKindOf( int callee )
 	if ( !inlineDetect )
 		return INLINE_NONE;
 
-	kind = detectInline( callee );
+	kind = detectInline( callee, &structural );
 
 	if ( kind != INLINE_NONE ) {		// only remember the positives, so
 						// the table holds routines rather
 						// than every address ever called
 		addInlineRoutine( callee, kind, 0, FALSE );
 		printf( "\rinline-data routine detected at %04X\n", callee );
-	}
+	} else if ( structural )		// right shape, unknown convention:
+		addCandidateSite( callee, adrs );	// judge it by its call sites
 
 	return kind;
 }
@@ -820,7 +1016,7 @@ bool trace( int pc )
 			// if the callee takes its argument inline, the bytes
 			// after the call are that argument; execution resumes
 			// past it, not at it
-			kind = inlineKindOf( adrs );
+			kind = inlineKindOf( adrs, tpc );
 
 			if ( kind != INLINE_NONE ) {
 				dlen = inlineArgLength( tpc, kind, inlineFixedLen( adrs ) );
@@ -1214,6 +1410,8 @@ bool analyzeCode( char *dtext )
 		dumpAnalysisFlags();
 #endif
 
+		inlineSuggest();		// judge inline-data candidates
+						// by their call sites
 		genAnalysisList();		// generate control data
 		writeCtlFile();			// write control data to ctl file
 		deleteLineList();
@@ -1486,7 +1684,7 @@ void genAnalysisList( void )
 	int	i;
 	int	start, stop;
 	byte	aflag, lastflag, data;
-	char	code, ostr[64], datatype[32];
+	char	code, ostr[160], datatype[32];
 
 	aflag = lastflag = analysisFlags[0];
 	start = offset;
@@ -1522,6 +1720,38 @@ void genAnalysisList( void )
 		sprintf( ostr, "r %04X,%s\t\t; inline-data routine (%s)",
 		         inlineTable[i].adrs, type,
 		         inlineTable[i].declared ? "declared" : "detected" );
+		addListEntry( ostr );
+	}
+
+	for ( i = 0; i < candCount; i++ ) {		// routines that look the
+		char	type[8];			// part but could not be
+							// read from the callee
+		switch ( candTable[i].kind ) {
+		case INLINE_NUL:
+			strcpy( type, "z" );
+			break;
+
+		case INLINE_LEN:
+			strcpy( type, "l" );
+			break;
+
+		case INLINE_DC:
+			strcpy( type, "d" );
+			break;
+
+		case INLINE_DOLLAR:
+			strcpy( type, "$" );
+			break;
+
+		default:
+			continue;			// nothing to suggest
+		}
+
+		sprintf( ostr, ";r %04X,%s\t\t; SUGGESTED: %d call sites, %d strings,"
+		         " avg %d chars, no counter-example."
+		         " Remove the ';' to accept.",
+		         candTable[i].adrs, type, candTable[i].nsites,
+		         candTable[i].strings, candTable[i].avg );
 		addListEntry( ostr );
 	}
 
